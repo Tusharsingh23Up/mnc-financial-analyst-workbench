@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MNC Financial Analyst Workbench</title>
+<style>
+:root{
+  --bg:#0f172a;--panel:#111827;--card:#1f2937;--muted:#94a3b8;--text:#e5e7eb;--accent:#38bdf8;--good:#34d399;--warn:#fbbf24;--bad:#fb7185;--line:#334155;
+}
+*{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:linear-gradient(135deg,#0f172a 0%,#111827 50%,#020617 100%);color:var(--text);}
+header{padding:28px 24px 8px;max-width:1240px;margin:auto}
+h1{margin:0 0 8px;font-size:clamp(28px,4vw,46px);letter-spacing:-.04em}
+h2{font-size:20px;margin:0 0 14px}.subtitle{color:var(--muted);max-width:880px;line-height:1.55}
+.controls{display:grid;grid-template-columns:repeat(4,minmax(160px,1fr));gap:14px;margin:24px auto;max-width:1240px;padding:0 24px}
+.control,.card,.panel{background:rgba(31,41,55,.82);border:1px solid rgba(148,163,184,.18);box-shadow:0 18px 45px rgba(0,0,0,.24);border-radius:18px}
+.control{padding:14px}
+label{font-size:12px;color:var(--muted);display:block;margin-bottom:8px;text-transform:uppercase;letter-spacing:.08em}
+select,input{width:100%;background:#0b1220;color:var(--text);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:14px}
+main{max-width:1240px;margin:auto;padding:0 24px 36px}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(160px,1fr));gap:14px;margin-bottom:18px}
+.card{padding:18px}.metric{font-size:26px;font-weight:750;margin-top:6px}.metric.good{color:var(--good)}.metric.warn{color:var(--warn)}
+.grid{display:grid;grid-template-columns:1.2fr .8fr;gap:18px}.panel{padding:18px;margin-bottom:18px}
+canvas{width:100%;height:280px;background:#0b1220;border:1px solid var(--line);border-radius:14px}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:10px 9px;border-bottom:1px solid var(--line);text-align:right}th:first-child,td:first-child{text-align:left}th{color:#cbd5e1;font-weight:700;background:#0b1220;position:sticky;top:0}
+.memo{line-height:1.6;color:#d1d5db}.badge{display:inline-flex;align-items:center;border:1px solid var(--line);padding:6px 9px;border-radius:999px;color:#cbd5e1;margin:2px 4px 2px 0;font-size:12px}.footer{color:var(--muted);font-size:12px;margin-top:20px}
+@media(max-width:900px){.controls,.kpis,.grid{grid-template-columns:1fr}.metric{font-size:22px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>MNC Financial Analyst Workbench</h1>
+  <p class="subtitle">Browser-runnable finance analytics demo for Financial Analyst / FP&A / Finance Data Analyst roles. It combines peer benchmarking, ratio analysis, DCF valuation, scenario analysis and a concise management memo using sample Big Tech financial data.</p>
+</header>
+
+<section class="controls">
+  <div class="control"><label>Company</label><select id="company"></select></div>
+  <div class="control"><label>Scenario</label><select id="scenario"></select></div>
+  <div class="control"><label>Exit Multiple</label><input id="exitMultiple" type="number" min="8" max="35" step="0.5" value="18"></div>
+  <div class="control"><label>Target Upside %</label><input id="targetUpside" type="number" min="0" max="100" step="1" value="15"></div>
+</section>
+
+<main>
+  <section class="kpis">
+    <div class="card"><label>Latest Revenue</label><div id="kpiRevenue" class="metric"></div></div>
+    <div class="card"><label>Revenue CAGR</label><div id="kpiCagr" class="metric good"></div></div>
+    <div class="card"><label>EBIT Margin</label><div id="kpiMargin" class="metric"></div></div>
+    <div class="card"><label>DCF Equity Value / Share</label><div id="kpiValue" class="metric warn"></div></div>
+  </section>
+
+  <section class="grid">
+    <div>
+      <div class="panel"><h2>Revenue & Free Cash Flow Trend</h2><canvas id="trendChart" width="900" height="360"></canvas></div>
+      <div class="panel"><h2>Peer Benchmarking</h2><canvas id="peerChart" width="900" height="360"></canvas></div>
+    </div>
+    <aside>
+      <div class="panel"><h2>Management Memo</h2><div id="memo" class="memo"></div></div>
+      <div class="panel"><h2>Scenario Assumptions</h2><div id="assumptions"></div></div>
+    </aside>
+  </section>
+
+  <section class="panel">
+    <h2>Financial Statement Snapshot</h2>
+    <div style="overflow:auto;max-height:380px"><table id="snapshot"></table></div>
+  </section>
+  <p class="footer">Note: Data is a portfolio-ready sample model. For production work, replace the CSV/sample arrays with audited 10-K / 10-Q data from SEC EDGAR and economic indicators from FRED.</p>
+</main>
+
+<script>
+const financials = [
+  ["AAPL","Apple Inc.",2020,274515,169559,66288,57411,80674,7309,90943,112436,17102],
+  ["AAPL","Apple Inc.",2021,365817,212981,108949,94680,104038,11085,62639,124719,16427],
+  ["AAPL","Apple Inc.",2022,394328,223546,119437,99803,122151,10708,48304,120069,15943],
+  ["AAPL","Apple Inc.",2023,383285,214137,114301,96995,110543,10959,61555,111088,15813],
+  ["AAPL","Apple Inc.",2024,391035,210352,123216,93736,118254,9447,65171,106629,15343],
+  ["MSFT","Microsoft Corp.",2020,143015,46078,52959,44281,60675,15441,136527,70998,7610],
+  ["MSFT","Microsoft Corp.",2021,168088,52232,69916,61271,76740,20622,130334,67775,7547],
+  ["MSFT","Microsoft Corp.",2022,198270,62650,83383,72738,89035,23886,104749,61270,7496],
+  ["MSFT","Microsoft Corp.",2023,211915,65863,88523,72361,87582,28107,111262,59965,7472],
+  ["MSFT","Microsoft Corp.",2024,245122,74114,109433,88136,118548,44477,75531,67127,7431],
+  ["GOOGL","Alphabet Inc.",2020,182527,84732,41224,40269,65124,22281,136694,26772,6754],
+  ["GOOGL","Alphabet Inc.",2021,257637,110939,78714,76033,91652,24640,139649,28459,6628],
+  ["GOOGL","Alphabet Inc.",2022,282836,126203,74842,59972,91495,31485,113762,29679,13159],
+  ["GOOGL","Alphabet Inc.",2023,307394,133332,84293,73795,101746,32251,110916,28679,12905],
+  ["GOOGL","Alphabet Inc.",2024,350018,148184,112390,100118,125728,52535,95739,28528,12559]
+].map(r=>({ticker:r[0],company:r[1],year:r[2],revenue:r[3],cogs:r[4],ebit:r[5],net:r[6],cfo:r[7],capex:r[8],cash:r[9],debt:r[10],shares:r[11]}));
+
+const scenarios = {
+  Bear:{growth:[.03,.03,.025,.025,.02],terminal:.02,wacc:.095,tax:.17,margin:.255,capexPct:.09,nwcPct:.02},
+  Base:{growth:[.07,.065,.06,.055,.05],terminal:.025,wacc:.085,tax:.16,margin:.30,capexPct:.08,nwcPct:.015},
+  Bull:{growth:[.11,.10,.09,.08,.07],terminal:.03,wacc:.075,tax:.15,margin:.34,capexPct:.075,nwcPct:.01}
+};
+const fmtM = n => "$" + Math.round(n).toLocaleString() + "m";
+const fmtPct = n => (n*100).toFixed(1)+"%";
+const fmtD = n => "$"+n.toFixed(2);
+
+function init(){
+  const csel=document.getElementById("company"); const ssel=document.getElementById("scenario");
+  [...new Set(financials.map(d=>d.ticker))].forEach(t=>{let o=document.createElement("option");o.value=t;o.textContent=t+" - "+financials.find(d=>d.ticker===t).company;csel.appendChild(o)});
+  Object.keys(scenarios).forEach(s=>{let o=document.createElement("option");o.value=s;o.textContent=s;ssel.appendChild(o)});
+  csel.value="AAPL"; ssel.value="Base";
+  ["company","scenario","exitMultiple","targetUpside"].forEach(id=>document.getElementById(id).addEventListener("input",render));
+  render();
+}
+function cagr(first,last,years){return Math.pow(last/first,1/years)-1}
+function dcf(companyRows, scenario){
+  let latest=companyRows[companyRows.length-1], s=scenarios[scenario], rev=latest.revenue, pv=0, fcfSeries=[];
+  for(let i=0;i<5;i++){
+    rev *= (1+s.growth[i]);
+    const ebit=rev*s.margin, tax=ebit*s.tax, nopat=ebit-tax, capex=rev*s.capexPct, dep=rev*.045, nwc=rev*s.nwcPct;
+    const fcf=nopat+dep-capex-nwc;
+    fcfSeries.push({year:latest.year+i+1, revenue:rev, fcf});
+    pv += fcf / Math.pow(1+s.wacc,i+1);
+  }
+  const terminalFcf = fcfSeries[4].fcf*(1+s.terminal);
+  const terminalValue = terminalFcf/(s.wacc-s.terminal);
+  const pvTerminal = terminalValue/Math.pow(1+s.wacc,5);
+  const enterpriseValue=pv+pvTerminal;
+  const equityValue=enterpriseValue+latest.cash-latest.debt;
+  const valuePerShare=equityValue/latest.shares;
+  return {fcfSeries,pv,terminalValue,enterpriseValue,equityValue,valuePerShare};
+}
+function drawLineChart(canvas, labels, series){
+  const ctx=canvas.getContext("2d"), w=canvas.width,h=canvas.height; ctx.clearRect(0,0,w,h);
+  const pad=48, all=series.flatMap(s=>s.values), min=Math.min(...all)*.9, max=Math.max(...all)*1.08;
+  ctx.strokeStyle="#334155"; ctx.lineWidth=1; ctx.font="12px Inter,Arial"; ctx.fillStyle="#94a3b8";
+  for(let i=0;i<5;i++){let y=pad+(h-2*pad)*i/4; ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(w-pad,y);ctx.stroke(); ctx.fillText(fmtM(max-(max-min)*i/4),8,y+4)}
+  labels.forEach((l,i)=>{let x=pad+(w-2*pad)*i/(labels.length-1);ctx.fillText(l,x-14,h-18)});
+  const colors=["#38bdf8","#34d399","#fbbf24"];
+  series.forEach((s,si)=>{ctx.strokeStyle=colors[si%colors.length];ctx.lineWidth=3;ctx.beginPath();s.values.forEach((v,i)=>{let x=pad+(w-2*pad)*i/(labels.length-1);let y=pad+(h-2*pad)*(1-(v-min)/(max-min));i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke();ctx.fillStyle=colors[si%colors.length];ctx.fillText(s.name,w-pad-130,24+si*20)});
+}
+function drawBarChart(canvas, rows){
+  const ctx=canvas.getContext("2d"), w=canvas.width,h=canvas.height; ctx.clearRect(0,0,w,h);
+  const pad=50, max=Math.max(...rows.map(r=>r.ebitMargin))*1.2; ctx.font="12px Inter,Arial"; ctx.fillStyle="#94a3b8"; ctx.strokeStyle="#334155";
+  rows.forEach((r,i)=>{let x=pad+i*(w-2*pad)/rows.length+30, barW=70; let barH=(h-2*pad)*(r.ebitMargin/max); let y=h-pad-barH; ctx.fillStyle="#38bdf8"; ctx.fillRect(x,y,barW,barH); ctx.fillStyle="#e5e7eb"; ctx.fillText(r.ticker,x+14,h-20); ctx.fillText(fmtPct(r.ebitMargin),x+8,y-8)});
+  ctx.fillStyle="#94a3b8";ctx.fillText("Latest EBIT margin by peer",pad,24);
+}
+function render(){
+  const t=document.getElementById("company").value, scen=document.getElementById("scenario").value;
+  const rows=financials.filter(d=>d.ticker===t).sort((a,b)=>a.year-b.year), latest=rows[rows.length-1];
+  const revCagr=cagr(rows[0].revenue, latest.revenue, rows.length-1), margin=latest.ebit/latest.revenue, model=dcf(rows,scen);
+  document.getElementById("kpiRevenue").textContent=fmtM(latest.revenue);
+  document.getElementById("kpiCagr").textContent=fmtPct(revCagr);
+  document.getElementById("kpiMargin").textContent=fmtPct(margin);
+  document.getElementById("kpiValue").textContent=fmtD(model.valuePerShare);
+  const years=rows.map(r=>r.year).concat(model.fcfSeries.map(f=>f.year));
+  drawLineChart(document.getElementById("trendChart"), years, [
+    {name:"Revenue", values: rows.map(r=>r.revenue).concat(model.fcfSeries.map(f=>f.revenue))},
+    {name:"Free Cash Flow", values: rows.map(r=>r.cfo-r.capex).concat(model.fcfSeries.map(f=>f.fcf))}
+  ]);
+  const peerRows=[...new Set(financials.map(d=>d.ticker))].map(tk=>financials.filter(d=>d.ticker===tk).sort((a,b)=>a.year-b.year).at(-1)).map(r=>({ticker:r.ticker, ebitMargin:r.ebit/r.revenue}));
+  drawBarChart(document.getElementById("peerChart"), peerRows);
+  document.getElementById("assumptions").innerHTML = Object.entries(scenarios[scen]).map(([k,v])=>{
+    const val=Array.isArray(v)?v.map(x=>fmtPct(x)).join(", "):(typeof v==="number"?fmtPct(v):v);
+    return `<span class="badge">${k}: ${val}</span>`;
+  }).join("");
+  const recommendation=model.valuePerShare>document.getElementById("targetUpside").value ? "Attractive watchlist candidate" : "Monitor valuation discipline";
+  document.getElementById("memo").innerHTML = `<p><b>${latest.company}</b> shows a ${fmtPct(revCagr)} five-year revenue CAGR and latest EBIT margin of ${fmtPct(margin)}. Under the <b>${scen}</b> case, the simplified DCF implies an equity value per share of <b>${fmtD(model.valuePerShare)}</b>.</p><p><b>Recommendation:</b> ${recommendation}. Key watch areas are revenue durability, margin normalization, capex intensity and discount-rate sensitivity.</p>`;
+  const tbl=document.getElementById("snapshot");
+  tbl.innerHTML="<thead><tr><th>Year</th><th>Revenue</th><th>EBIT</th><th>EBIT Margin</th><th>Net Income</th><th>FCF</th><th>Cash</th><th>Debt</th></tr></thead><tbody>"+
+    rows.map(r=>`<tr><td>${r.year}</td><td>${fmtM(r.revenue)}</td><td>${fmtM(r.ebit)}</td><td>${fmtPct(r.ebit/r.revenue)}</td><td>${fmtM(r.net)}</td><td>${fmtM(r.cfo-r.capex)}</td><td>${fmtM(r.cash)}</td><td>${fmtM(r.debt)}</td></tr>`).join("")+"</tbody>";
+}
+init();
+</script>
+</body>
+</html>
